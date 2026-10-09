@@ -34,7 +34,7 @@ Suite di-generate di portal TestSprite 3.0 terhadap live URL di atas:
    halaman pelanggan; ubah status pesanan → terlihat di halaman status pelanggan
 4. **Persistensi** — kode pesanan unik & berurutan; keranjang tidak hilang antar halaman
 
-## Jalankan lokal
+## Jalankan lokal (dev)
 
 ```bash
 pip install -r requirements.txt
