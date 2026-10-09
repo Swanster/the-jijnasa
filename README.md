@@ -3,8 +3,7 @@
 Aplikasi pemesanan kopi via web + panel admin. Dibangun untuk **TestSprite Hackathon Season 4**:
 setiap pull request diuji otomatis oleh TestSprite terhadap URL live aplikasi ini.
 
-**Live URL:** _(isi setelah deploy — lihat "Deploy" di bawah)_
-`https://<app-kamu>.onrender.com`
+**Live URL:** `https://senja.keysproject.web.id/`
 
 ## Apa aplikasinya
 
@@ -52,16 +51,31 @@ ADMIN_PASSWORD=rahasia123 SECRET_KEY=acak-kuat PORT=5000 python app.py
 
 ## Deploy (supaya dapat Live URL)
 
-Opsi termudah — Render (gratis):
+Dijalankan di VPS sendiri dengan **gunicorn di belakang PM2** (proses auto-restart,
+persisten antar reboot):
 
-1. Push repo ini ke GitHub (public)
-2. Di [render.com](https://render.com) → New → Web Service → pilih repo ini
-3. Render otomatis membaca `render.yaml` (build & start command sudah benar)
-4. Isi env `ADMIN_PASSWORD` dengan kata sandi sendiri, deploy
-5. Salin URL publiknya ke bagian **Live URL** di atas
+```bash
+pip install -r requirements.txt
+npm install -g pm2
 
-Alternatif: Railway / Fly.io / VPS mana pun yang bisa menjalankan
-`gunicorn app:app --bind 0.0.0.0:$PORT`.
+ADMIN_PASSWORD=<kata-sandi-admin> SECRET_KEY=<acak-kuat> PORT=5000 \
+pm2 start gunicorn --name kedai-senja --cwd /path/to/kedai-web -- -b 127.0.0.1:5000 app:app
+
+pm2 save          # simpan daftar proses
+pm2 startup       # ikuti perintah yang dicetak agar jalan saat server reboot
+```
+
+Di depannya pasang reverse proxy (nginx/caddy) ke `127.0.0.1:5000` untuk domain +
+HTTPS — `senja.keysproject.web.id` sudah diarahkan ke sana.
+
+Update kode setelah pull:
+
+```bash
+cd /path/to/kedai-web && git pull && pm2 restart kedai-senja
+```
+
+Catatan: `ADMIN_PASSWORD` dan `SECRET_KEY` wajib lewat env — kalau `SECRET_KEY`
+berganti, sesi admin lama keluar semua.
 
 ## Wiring TestSprite (syarat hackathon)
 
@@ -94,7 +108,6 @@ kedai-web/
 ├── app.py                 # aplikasi Flask (rute pelanggan + admin)
 ├── db.py                  # lapisan SQLite (menu, keranjang, pesanan)
 ├── requirements.txt       # flask + gunicorn
-├── render.yaml            # deploy 1-klik ke Render
 ├── .github/workflows/
 │   └── testsprite.yml     # check otomatis tiap PR (Route B)
 └── README.md
