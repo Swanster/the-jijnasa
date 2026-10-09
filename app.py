@@ -23,7 +23,8 @@ import db
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-senja-ganti-di-produksi")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "senja123")
+# Tanpa default yang diketahui umum: kosong = login admin nonaktif.
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 db.init_db()
 
@@ -517,7 +518,7 @@ def admin_login():
 
 @app.post("/admin")
 def admin_login_post():
-    if request.form.get("password") == ADMIN_PASSWORD:
+    if ADMIN_PASSWORD and request.form.get("password") == ADMIN_PASSWORD:
         session["is_admin"] = True
         return redirect(url_for("admin_dash"))
     return redirect(url_for("admin_login", err="Kata sandi salah."))

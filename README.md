@@ -42,7 +42,8 @@ python app.py
 # buka http://127.0.0.1:5000
 ```
 
-Login admin demo: kata sandi `senja123` (ubah via env `ADMIN_PASSWORD`).
+Atur kata sandi admin lewat env `ADMIN_PASSWORD` — tanpa env itu, login admin
+dinonaktifkan (semua percobaan ditolak).
 
 ```bash
 # contoh dengan env sendiri
