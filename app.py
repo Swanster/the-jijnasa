@@ -312,7 +312,7 @@ def index():
 <span class="dots" aria-hidden="true"></span>
 <span class="price">{rupiah(m['harga'])}</span>
 </div>
-<p class="desc">{escape(m['deskripsi'] or '')}</p>
+<p class="desc">{escape(m['deskripsi'] or '') or '<i>Belum ada deskripsi.</i>'}</p>
 <form class="qtyform" method="post" action="{url_for('cart_add')}">
 <input type="hidden" name="menu_id" value="{m['id']}">
 <label>Jumlah <input type="number" name="qty" value="1" min="1" max="20" aria-label="Jumlah {escape(m['nama'])}"></label>
@@ -521,6 +521,9 @@ def admin_login_post():
     if ADMIN_PASSWORD and request.form.get("password") == ADMIN_PASSWORD:
         session["is_admin"] = True
         return redirect(url_for("admin_dash"))
+    # Login gagal: buang sesi admin lama (kalau ada) supaya halaman error
+    # benar-benar tampil, bukan langsung loncat ke dashboard.
+    session.pop("is_admin", None)
     return redirect(url_for("admin_login", err="Kata sandi salah."))
 
 
@@ -565,7 +568,7 @@ def admin_dash():
         aktif_txt = "Aktif" if m["aktif"] else "Nonaktif"
         mrows.append(f"""
 <tr>
-<td><div class="stacked"><strong>{escape(m['nama'])}</strong><span class="sub">{KATEGORI_LABEL.get(m['kategori'], m['kategori'])} &middot; {escape(m['deskripsi'])}</span></div></td>
+<td><div class="stacked"><strong>{escape(m['nama'])}</strong><span class="sub">{KATEGORI_LABEL.get(m['kategori'], m['kategori'])} &middot; {escape(m['deskripsi']) or '&mdash;'}</span></div></td>
 <td class="num">{rupiah(m['harga'])}</td>
 <td class="nowrap">{aktif_txt}</td>
 <td class="nowrap">
