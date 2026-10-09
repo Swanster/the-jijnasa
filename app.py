@@ -511,8 +511,7 @@ def admin_login():
 <form class="stack" method="post" action="{url_for('admin_login_post')}">
 <label>Kata sandi admin <input type="password" name="password" required autocomplete="current-password"></label>
 <button type="submit">Masuk</button>
-</form>
-<p class="empty mt">Demo: kata sandi bawaan <code>senja123</code> (ubah via env <code>ADMIN_PASSWORD</code>).</p>"""
+</form>"""
     return layout("Login Admin", body)
 
 
