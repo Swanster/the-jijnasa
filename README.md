@@ -85,8 +85,10 @@ Pilih salah satu:
   Settings → GitHub App → install ke repo ini. Hasil tes muncul sebagai
   komentar di PR.
 - **Route B — GitHub Actions (sudah disiapkan):** file
-  `.github/workflows/testsprite.yml` sudah ada. Tinggal tambah secret
-  `TESTSPRITE_API_KEY` di GitHub repo → Settings → Secrets → Actions.
+  `.github/workflows/testsprite.yml` sudah ada. Tinggal tambah dua secret di
+  GitHub repo → Settings → Secrets → Actions:
+  - `TESTSPRITE_API_KEY` — API key TestSprite kamu
+  - `TESTSPRITE_PROJECT_ID` — project id dari portal 3.0 (mis. `proj_...`)
 
 Keduanya dihitung. Setelah itu, buka satu PR (mis. ubah teks di README) dan
 pastikan check TestSprite hijau — **link PR itulah yang disubmit**.
