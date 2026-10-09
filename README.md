@@ -1,0 +1,112 @@
+# ☕ Kedai Kopi Senja — Web Order App
+
+Aplikasi pemesanan kopi via web + panel admin. Dibangun untuk **TestSprite Hackathon Season 4**:
+setiap pull request diuji otomatis oleh TestSprite terhadap URL live aplikasi ini.
+
+**Live URL:** _(isi setelah deploy — lihat "Deploy" di bawah)_
+`https://<app-kamu>.onrender.com`
+
+## Apa aplikasinya
+
+Kedai Kopi Senja adalah web app pemesanan untuk kedai kopi fiktif — versi web dari
+bot Telegram "Kedai Kopi Senja" (portfolio bot saya). Pelanggan bisa:
+
+- Lihat menu (Kopi / Non-Kopi / Snack) dan tambah ke keranjang
+- Checkout: isi nama, pilih ambil/diantar, pilih tunai/QRIS
+- Terima **kode pesanan** (cth: `KS-20261009-001`, nomor urut persisten per hari)
+- Pantau status pesanan: Baru masuk → Sedang dimasak → Siap → Selesai
+
+Admin (login kata sandi) bisa:
+
+- Lihat pesanan hari ini dan ubah statusnya
+- Kelola menu: tambah, ubah harga, aktif/nonaktif
+
+Data tersimpan di **SQLite** — menu, keranjang, pelanggan, dan pesanan semuanya
+persisten (tidak hilang saat restart).
+
+## Yang di-cover test suite TestSprite
+
+Suite di-generate di portal TestSprite 3.0 terhadap live URL di atas:
+
+1. **Alur pelanggan end-to-end** — buka menu → tambah item ke keranjang → checkout
+   → terima kode pesanan → cek status dengan kode tersebut
+2. **Validasi form** — checkout tanpa nama ditolak; tambah menu tanpa nama/harga ditolak
+3. **Alur admin** — login salah ditolak; login benar → tambah menu → menu muncul di
+   halaman pelanggan; ubah status pesanan → terlihat di halaman status pelanggan
+4. **Persistensi** — kode pesanan unik & berurutan; keranjang tidak hilang antar halaman
+
+## Jalankan lokal
+
+```bash
+pip install -r requirements.txt
+python app.py
+# buka http://127.0.0.1:5000
+```
+
+Login admin demo: kata sandi `senja123` (ubah via env `ADMIN_PASSWORD`).
+
+```bash
+# contoh dengan env sendiri
+ADMIN_PASSWORD=rahasia123 SECRET_KEY=acak-kuat PORT=5000 python app.py
+```
+
+## Deploy (supaya dapat Live URL)
+
+Opsi termudah — Render (gratis):
+
+1. Push repo ini ke GitHub (public)
+2. Di [render.com](https://render.com) → New → Web Service → pilih repo ini
+3. Render otomatis membaca `render.yaml` (build & start command sudah benar)
+4. Isi env `ADMIN_PASSWORD` dengan kata sandi sendiri, deploy
+5. Salin URL publiknya ke bagian **Live URL** di atas
+
+Alternatif: Railway / Fly.io / VPS mana pun yang bisa menjalankan
+`gunicorn app:app --bind 0.0.0.0:$PORT`.
+
+## Wiring TestSprite (syarat hackathon)
+
+Pilih salah satu:
+
+- **Route A — GitHub App (tanpa ubah repo):** di dashboard TestSprite →
+  Settings → GitHub App → install ke repo ini. Hasil tes muncul sebagai
+  komentar di PR.
+- **Route B — GitHub Actions (sudah disiapkan):** file
+  `.github/workflows/testsprite.yml` sudah ada. Tinggal tambah secret
+  `TESTSPRITE_API_KEY` di GitHub repo → Settings → Secrets → Actions.
+
+Keduanya dihitung. Setelah itu, buka satu PR (mis. ubah teks di README) dan
+pastikan check TestSprite hijau — **link PR itulah yang disubmit**.
+
+## Cara submit (sebelum 22 Okt 23:59 PT)
+
+1. Pastikan suite sudah di-generate di portal TestSprite 3.0 (terhadap live URL)
+2. Buka PR di repo ini yang memicu check TestSprite (harus hijau ✅)
+3. Post di Discord TestSprite → `#hackathon-submissions`:
+   - link PR
+   - live URL
+   - email + nama akun TestSprite
+   - (opsional) link video demo
+
+## Struktur proyek
+
+```
+kedai-web/
+├── app.py                 # aplikasi Flask (rute pelanggan + admin)
+├── db.py                  # lapisan SQLite (menu, keranjang, pesanan)
+├── requirements.txt       # flask + gunicorn
+├── render.yaml            # deploy 1-klik ke Render
+├── .github/workflows/
+│   └── testsprite.yml     # check otomatis tiap PR (Route B)
+└── README.md
+```
+
+## Skenario demo 3 menit (untuk juri / klien)
+
+1. Buka live URL → tambah 2 Kopi Susu Senja ke keranjang → checkout sebagai "Budi"
+2. Catat kode pesanan → buka "Cek Status" → status "Baru masuk"
+3. Login admin → ubah status jadi "Sedang dimasak"
+4. Refresh halaman status pelanggan → berubah jadi "Sedang dimasak" ✨
+5. Tunjukkan PR di GitHub dengan check TestSprite hijau
+
+---
+Dibuat oleh **Suprapto** — brand [JIJNASA](https://jijnasa.id) · *"Keingintahuan yang membangun."*

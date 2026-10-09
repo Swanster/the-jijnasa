@@ -1,0 +1,31 @@
+# TestSprite check — Season 4 hackathon
+#
+# Setiap pull request ke main otomatis diuji TestSprite terhadap
+# URL live aplikasi. Lihat https://docs.testsprite.com untuk
+# opsi input terbaru dari action ini.
+#
+# Setup sekali:
+#   1. Buat akun gratis di https://www.testsprite.com (pakai email
+#      yang sama dengan yang disubmit di Discord #hackathon-submissions)
+#   2. Di dashboard TestSprite 3.0, generate test suite terhadap
+#      URL live aplikasi (bukan localhost)
+#   3. Di repo GitHub: Settings -> Secrets -> Actions, tambah secret
+#      bernama TESTSPRITE_API_KEY berisi API key TestSprite kamu
+#   4. (Alternatif tanpa file ini: install GitHub App dari dashboard
+#      TestSprite via Settings -> GitHub App — hasilnya sama)
+
+name: TestSprite
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  testsprite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run TestSprite check
+        uses: TestSprite/testsprite-action@v1
+        with:
+          api-key: ${{ secrets.TESTSPRITE_API_KEY }}
