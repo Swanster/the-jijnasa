@@ -15,10 +15,18 @@ bot Telegram "Kedai Kopi Senja" (portfolio bot saya). Pelanggan bisa:
 - Terima **kode pesanan** (cth: `KS-20261009-001`, nomor urut persisten per hari)
 - Pantau status pesanan: Baru masuk → Sedang dimasak → Siap → Selesai
 
-Admin (login kata sandi) bisa:
+Admin (login username + kata sandi) bisa:
 
 - Lihat pesanan hari ini dan ubah statusnya
+- **Riwayat pesanan lintas tanggal** (`/admin/pesanan`): cari kode
+  (`KS-20261009-001`), filter rentang tanggal, paginasi, klik kode untuk
+  lihat detail item + ubah status — data di-query langsung dari SQLite
+  setiap request, halaman admin selalu `Cache-Control: no-store`
 - Kelola menu: tambah, ubah harga, aktif/nonaktif
+- **Muat Ulang Aplikasi** (Pemeliharaan): graceful reload worker gunicorn
+  via SIGHUP — sesi admin tetap sah (cookie + `SECRET_KEY` tidak berubah),
+  semua data dari database. Hanya aktif di bawah gunicorn (mode dev
+  melaporkan tidak tersedia).
 
 Data tersimpan di **SQLite** — menu, keranjang, pelanggan, dan pesanan semuanya
 persisten (tidak hilang saat restart).

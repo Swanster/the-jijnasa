@@ -13,8 +13,10 @@ Produksi (contoh):
 
 import hashlib
 import os
+import sys
 import uuid
 from functools import wraps
+from urllib.parse import urlencode
 
 from flask import Flask, abort, redirect, request, session, url_for
 from markupsafe import escape
@@ -596,7 +598,7 @@ def admin_dash():
     )
 
     body = f"""
-<h2 class="sec">Dashboard Admin <a class="btn ghost small" href="{url_for('admin_logout')}">Keluar</a></h2>
+<h2 class="sec">Dashboard Admin <a class="btn ghost small" href="{url_for('admin_riwayat')}">Riwayat Pesanan</a> <a class="btn ghost small" href="{url_for('admin_logout')}">Keluar</a></h2>
 <h2 class="sec">Pesanan Hari Ini ({len(rows)})</h2>
 {orders_html}
 <h2 class="sec">Kelola Menu</h2>
@@ -610,8 +612,22 @@ def admin_dash():
 <label>Harga (Rp) <input type="number" name="harga" required min="0" step="500"></label>
 <label>Deskripsi <input type="text" name="deskripsi" maxlength="200"></label>
 <button type="submit">Tambah Menu</button>
-</form>"""
+</form>
+<h2 class="sec">Pemeliharaan</h2>
+<form class="inline" method="post" action="{url_for('admin_restart')}"
+onsubmit="return confirm('Muat ulang aplikasi? Sesi admin tidak hilang.')">
+<button class="small ghost" type="submit">Muat Ulang Aplikasi</button>
+</form>
+<p class="empty">Me-reload proses server (tidak menghapus sesi admin; menu &amp; pesanan dari database, tetap aman).</p>"""
     return layout("Dashboard Admin", body)
+
+
+@app.after_request
+def tanpa_cache_admin(resp):
+    """Halaman admin jangan di-cache: data pesanan harus selalu segar."""
+    if request.path.startswith("/admin"):
+        resp.headers["Cache-Control"] = "no-store"
+    return resp
 
 
 @app.post("/admin/pesanan/status")
@@ -623,6 +639,134 @@ def admin_set_status():
     except (TypeError, ValueError):
         pass
     return redirect(url_for("admin_dash"))
+
+
+PER_HAL = 20
+
+
+@app.get("/admin/pesanan")
+@admin_required
+def admin_riwayat():
+    kode = (request.args.get("kode") or "").strip()
+    dari = (request.args.get("dari") or "").strip()
+    sampai = (request.args.get("sampai") or "").strip()
+    try:
+        hal = max(1, int(request.args.get("hal", 1)))
+    except (TypeError, ValueError):
+        hal = 1
+
+    total = db.hitung_pesanan(kode, dari, sampai)
+    total_hal = max(1, -(-total // PER_HAL))
+    hal = min(hal, total_hal)
+    orders = db.semua_pesanan(kode, dari, sampai, PER_HAL, (hal - 1) * PER_HAL)
+
+    rows = []
+    for o in orders:
+        opts = "".join(
+            f"<option value='{s}'{' selected' if o['status'] == s else ''}>{db.STATUS_LABEL[s]}</option>"
+            for s in db.STATUS_LIST
+        )
+        rows.append(f"""
+<tr>
+<td class="nowrap"><a href="{url_for('admin_pesanan_detail', kode=o['kode'])}"><strong>{o['kode']}</strong></a></td>
+<td class="nowrap"><div class="stacked">{escape(o['nama'])}<span class="sub">{o['dibuat']}</span></div></td>
+<td class="nowrap">{o['tipe']}</td>
+<td class="nowrap">{o['bayar'].upper()}</td>
+<td class="num">{rupiah(o['total'])}</td>
+<td class="nowrap"><span class="badge {o['status']}">{db.STATUS_LABEL[o['status']]}</span></td>
+<td class="nowrap"><form class="inline" method="post" action="{url_for('admin_set_status')}">
+<input type="hidden" name="pesanan_id" value="{o['id']}">
+<select name="status" aria-label="Ubah status {o['kode']}">{opts}</select>
+<button class="small" type="submit">Ubah</button>
+</form></td>
+</tr>""")
+    tabel = (
+        "<div class='table-wrap'><table class='admin riwayat'><thead><tr>"
+        "<th>Kode</th><th>Pelanggan / Tanggal</th><th>Tipe</th><th>Bayar</th>"
+        "<th class='num'>Total</th><th>Status</th><th>Aksi</th>"
+        f"</tr></thead><tbody>{''.join(rows)}</tbody></table></div>"
+        if rows
+        else "<p class='empty'>Tidak ada pesanan untuk filter ini.</p>"
+    )
+
+    # kontrol halaman, pertahankan filter aktif
+    def args_hal(h):
+        q = {k: v for k, v in
+             (("kode", kode), ("dari", dari), ("sampai", sampai)) if v}
+        q["hal"] = h
+        return "?" + urlencode(q)
+    nav = ""
+    if total_hal > 1:
+        prev = f"<a class='btn ghost small' href='{url_for('admin_riwayat')}{args_hal(hal - 1)}'>&laquo; Sebelumnya</a>" if hal > 1 else ""
+        nxt = f"<a class='btn ghost small' href='{url_for('admin_riwayat')}{args_hal(hal + 1)}'>Berikutnya &raquo;</a>" if hal < total_hal else ""
+        nav = f"<p class='empty mt'>{prev} Halaman {hal} dari {total_hal} ({total} pesanan) {nxt}</p>"
+
+    body = f"""
+<h2 class="sec">Riwayat Pesanan
+<a class="btn ghost small" href="{url_for('admin_dash')}">Dashboard</a></h2>
+<form class="inline mt" method="get" action="{url_for('admin_riwayat')}">
+<label>Cari kode <input type="text" name="kode" value="{escape(kode)}" placeholder="KS-20261009-001"></label>
+<label>Dari tanggal <input type="date" name="dari" value="{escape(dari)}"></label>
+<label>Sampai <input type="date" name="sampai" value="{escape(sampai)}"></label>
+<button class="small" type="submit">Filter</button>
+</form>
+{tabel}
+{nav}"""
+    return layout("Riwayat Pesanan", body)
+
+
+@app.get("/admin/pesanan/<kode>")
+@admin_required
+def admin_pesanan_detail(kode):
+    row, items = db.cari_kode(kode)
+    if not row:
+        abort(404)
+    opts = "".join(
+        f"<option value='{s}'{' selected' if row['status'] == s else ''}>{db.STATUS_LABEL[s]}</option>"
+        for s in db.STATUS_LIST
+    )
+    item_rows = "".join(
+        f"<tr><td>{escape(i['nama'])}</td><td class='num'>{i['qty']}</td>"
+        f"<td class='num'>{rupiah(i['harga'])}</td>"
+        f"<td class='num'>{rupiah(i['harga'] * i['qty'])}</td></tr>"
+        for i in items
+    )
+    body = f"""
+<h2 class="sec">Pesanan {escape(row['kode'])}
+<a class="btn ghost small" href="{url_for('admin_riwayat')}">Riwayat</a></h2>
+<p class="mt"><strong>{escape(row['nama'])}</strong> &middot; {row['tipe']} &middot; {row['bayar'].upper()} &middot; {row['dibuat']}</p>
+<div class="table-wrap mt"><table class="admin"><thead><tr>
+<th>Item</th><th class="num">Qty</th><th class="num">Harga</th><th class="num">Subtotal</th>
+</tr></thead><tbody>{item_rows}</tbody></table></div>
+<p class="mt">Total: <strong>{rupiah(row['total'])}</strong></p>
+<form class="inline mt" method="post" action="{url_for('admin_set_status')}">
+<input type="hidden" name="pesanan_id" value="{row['id']}">
+<label>Status <select name="status" aria-label="Ubah status">{opts}</select></label>
+<button class="small" type="submit">Ubah</button>
+</form>"""
+    return layout(f"Pesanan {row['kode']}", body)
+
+
+@app.post("/admin/restart")
+@admin_required
+def admin_restart():
+    """Graceful reload proses worker (gunicorn): kirim SIGHUP ke master.
+
+    Sesi admin tetap sah karena sesi berbasis cookie dengan SECRET_KEY yang
+    tidak berubah. Di mode dev (tanpa gunicorn) reload dilewati dan hanya
+    dilaporkan — mengirim sinyal ke proses induk non-gunicorn tidak aman.
+    """
+    if "gunicorn" not in sys.modules:
+        return {"ok": False, "pesan": "Reload hanya tersedia saat berjalan di bawah gunicorn."}
+    import signal
+    import threading
+
+    def _sighup():
+        os.kill(os.getppid(), signal.SIGHUP)
+
+    # Tunda sejenak supaya respons HTTP terkirim dulu sebelum worker reload.
+    threading.Timer(0.5, _sighup).start()
+    return {"ok": True, "pesan": "Aplikasi dimuat ulang. Sesi admin tetap aktif."}
 
 
 @app.post("/admin/menu/tambah")

@@ -236,6 +236,40 @@ def pesanan_hari_ini():
         ).fetchall()
 
 
+def _filter_pesanan(kode=None, dari=None, sampai=None):
+    """Bangun klausa WHERE untuk riwayat. Return (sql_where, args)."""
+    where, args = [], []
+    if kode:
+        where.append("kode LIKE ?")
+        args.append(f"%{(kode or '').strip().upper()}%")
+    if dari:
+        where.append("date(dibuat,'localtime') >= date(?)")
+        args.append(dari)
+    if sampai:
+        where.append("date(dibuat,'localtime') <= date(?)")
+        args.append(sampai)
+    return (" WHERE " + " AND ".join(where)) if where else "", args
+
+
+def semua_pesanan(kode=None, dari=None, sampai=None, limit=20, offset=0):
+    """Riwayat pesanan lintas tanggal (untuk halaman admin)."""
+    w, args = _filter_pesanan(kode, dari, sampai)
+    with _conn() as c:
+        return c.execute(
+            "SELECT * FROM pesanan" + w +
+            " ORDER BY id DESC LIMIT ? OFFSET ?",
+            (*args, limit, offset),
+        ).fetchall()
+
+
+def hitung_pesanan(kode=None, dari=None, sampai=None):
+    w, args = _filter_pesanan(kode, dari, sampai)
+    with _conn() as c:
+        return c.execute(
+            "SELECT COUNT(*) AS n FROM pesanan" + w, args
+        ).fetchone()["n"]
+
+
 def pesanan_user(user_id, limit=5):
     with _conn() as c:
         return c.execute(
