@@ -24,6 +24,7 @@ import db
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-senja-ganti-di-produksi")
 # Tanpa default yang diketahui umum: kosong = login admin nonaktif.
+ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 db.init_db()
@@ -504,13 +505,17 @@ def cek_status():
 def admin_login():
     if session.get("is_admin"):
         return redirect(url_for("admin_dash"))
-    err = request.args.get("err", "")
+    return _login_page(request.args.get("err", ""))
+
+
+def _login_page(err=""):
     err_html = f"<p class='error'>{escape(err)}</p>" if err else ""
     body = f"""
 <h2 class="sec">Login Admin</h2>
 {err_html}
 <form class="stack" method="post" action="{url_for('admin_login_post')}">
-<label>Kata sandi admin <input type="password" name="password" required autocomplete="current-password"></label>
+<label>Username <input type="text" name="username" required autocomplete="username"></label>
+<label>Kata sandi <input type="password" name="password" required autocomplete="current-password"></label>
 <button type="submit">Masuk</button>
 </form>"""
     return layout("Login Admin", body)
@@ -518,13 +523,14 @@ def admin_login():
 
 @app.post("/admin")
 def admin_login_post():
-    if ADMIN_PASSWORD and request.form.get("password") == ADMIN_PASSWORD:
+    username = (request.form.get("username") or "").strip()
+    password = request.form.get("password") or ""
+    if ADMIN_PASSWORD and username == ADMIN_USER and password == ADMIN_PASSWORD:
         session["is_admin"] = True
         return redirect(url_for("admin_dash"))
-    # Login gagal: buang sesi admin lama (kalau ada) supaya halaman error
-    # benar-benar tampil, bukan langsung loncat ke dashboard.
-    session.pop("is_admin", None)
-    return redirect(url_for("admin_login", err="Kata sandi salah."))
+    # Login gagal: render halaman login + error langsung (tanpa redirect),
+    # supaya pesan tampil apa pun status sesi, dan sesi aktif tetap utuh.
+    return _login_page("Username atau kata sandi salah.")
 
 
 @app.get("/admin/logout")

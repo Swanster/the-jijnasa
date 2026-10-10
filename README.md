@@ -42,12 +42,13 @@ python app.py
 # buka http://127.0.0.1:5000
 ```
 
-Atur kata sandi admin lewat env `ADMIN_PASSWORD` — tanpa env itu, login admin
-dinonaktifkan (semua percobaan ditolak).
+Atur username & kata sandi admin lewat env `ADMIN_USER` (default: `admin`) dan
+`ADMIN_PASSWORD` — tanpa `ADMIN_PASSWORD`, login admin dinonaktifkan (semua
+percobaan ditolak). Setelah logout, username & kata sandi harus diisi ulang.
 
 ```bash
 # contoh dengan env sendiri
-ADMIN_PASSWORD=rahasia123 SECRET_KEY=acak-kuat PORT=5000 python app.py
+ADMIN_USER=bu-admin ADMIN_PASSWORD=rahasia123 SECRET_KEY=acak-kuat PORT=5000 python app.py
 ```
 
 ## Deploy (supaya dapat Live URL)
@@ -59,7 +60,7 @@ persisten antar reboot):
 pip install -r requirements.txt
 npm install -g pm2
 
-ADMIN_PASSWORD=<kata-sandi-admin> SECRET_KEY=<acak-kuat> PORT=5000 \
+ADMIN_USER=<username-admin> ADMIN_PASSWORD=<kata-sandi-admin> SECRET_KEY=<acak-kuat> PORT=5000 \
 pm2 start gunicorn --name kedai-senja --cwd /path/to/kedai-web -- -b 127.0.0.1:5000 app:app
 
 pm2 save          # simpan daftar proses
