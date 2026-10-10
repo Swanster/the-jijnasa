@@ -505,7 +505,10 @@ def cek_status():
 # ---------------------------------------------------------------- admin
 @app.get("/admin")
 def admin_login():
-    if session.get("is_admin"):
+    # Saat sudah login, redirect ke dashboard — KECUALI ada parameter err
+    # (login gagal): halaman error harus tetap tampil walau sesi admin lama
+    # masih ada, jangan ditimpa redirect.
+    if session.get("is_admin") and not request.args.get("err"):
         return redirect(url_for("admin_dash"))
     return _login_page(request.args.get("err", ""))
 
@@ -530,9 +533,10 @@ def admin_login_post():
     if ADMIN_PASSWORD and username == ADMIN_USER and password == ADMIN_PASSWORD:
         session["is_admin"] = True
         return redirect(url_for("admin_dash"))
-    # Login gagal: render halaman login + error langsung (tanpa redirect),
-    # supaya pesan tampil apa pun status sesi, dan sesi aktif tetap utuh.
-    return _login_page("Username atau kata sandi salah.")
+    # Login gagal: redirect ke halaman login dengan parameter err (kontrak
+    # yang direkam suite TestSprite). Sesi admin lama TIDAK dibuang — GET
+    # /admin dengan err menampilkan form + pesan error walau sesi ada.
+    return redirect(url_for("admin_login", err="Kata sandi salah."))
 
 
 @app.get("/admin/logout")
