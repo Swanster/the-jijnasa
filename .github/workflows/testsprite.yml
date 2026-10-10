@@ -23,9 +23,18 @@ on:
 jobs:
   testsprite:
     runs-on: ubuntu-latest
+    # Fork PR tidak punya repository secrets -> api-key kosong -> check selalu
+    # merah. Lewati fork; push dari repo sendiri tetap jalan.
+    if: >-
+      github.event_name != 'pull_request' ||
+      github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v4
       - name: Run TestSprite check
         uses: TestSprite/testsprite-action@v1
         with:
           api-key: ${{ secrets.TESTSPRITE_API_KEY }}
+          # Project id dari portal TestSprite 3.0 (Settings -> Project).
+          # Wajib: tanpa ini CLI gagal dengan
+          # "VALIDATION_ERROR: --all requires a project id".
+          project: ${{ secrets.TESTSPRITE_PROJECT_ID }}

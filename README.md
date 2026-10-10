@@ -34,7 +34,7 @@ Suite di-generate di portal TestSprite 3.0 terhadap live URL di atas:
    halaman pelanggan; ubah status pesanan → terlihat di halaman status pelanggan
 4. **Persistensi** — kode pesanan unik & berurutan; keranjang tidak hilang antar halaman
 
-## Jalankan lokal
+## Jalankan lokal (dev)
 
 ```bash
 pip install -r requirements.txt
@@ -42,11 +42,13 @@ python app.py
 # buka http://127.0.0.1:5000
 ```
 
-Login admin demo: kata sandi `senja123` (ubah via env `ADMIN_PASSWORD`).
+Atur username & kata sandi admin lewat env `ADMIN_USER` (default: `admin`) dan
+`ADMIN_PASSWORD` — tanpa `ADMIN_PASSWORD`, login admin dinonaktifkan (semua
+percobaan ditolak). Setelah logout, username & kata sandi harus diisi ulang.
 
 ```bash
 # contoh dengan env sendiri
-ADMIN_PASSWORD=rahasia123 SECRET_KEY=acak-kuat PORT=5000 python app.py
+ADMIN_USER=bu-admin ADMIN_PASSWORD=rahasia123 SECRET_KEY=acak-kuat PORT=5000 python app.py
 ```
 
 ## Deploy (supaya dapat Live URL)
@@ -58,7 +60,7 @@ persisten antar reboot):
 pip install -r requirements.txt
 npm install -g pm2
 
-ADMIN_PASSWORD=<kata-sandi-admin> SECRET_KEY=<acak-kuat> PORT=5000 \
+ADMIN_USER=<username-admin> ADMIN_PASSWORD=<kata-sandi-admin> SECRET_KEY=<acak-kuat> PORT=5000 \
 pm2 start gunicorn --name kedai-senja --cwd /path/to/kedai-web -- -b 127.0.0.1:5000 app:app
 
 pm2 save          # simpan daftar proses
@@ -85,8 +87,10 @@ Pilih salah satu:
   Settings → GitHub App → install ke repo ini. Hasil tes muncul sebagai
   komentar di PR.
 - **Route B — GitHub Actions (sudah disiapkan):** file
-  `.github/workflows/testsprite.yml` sudah ada. Tinggal tambah secret
-  `TESTSPRITE_API_KEY` di GitHub repo → Settings → Secrets → Actions.
+  `.github/workflows/testsprite.yml` sudah ada. Tinggal tambah dua secret di
+  GitHub repo → Settings → Secrets → Actions:
+  - `TESTSPRITE_API_KEY` — API key TestSprite kamu
+  - `TESTSPRITE_PROJECT_ID` — project id dari portal 3.0 (mis. `proj_...`)
 
 Keduanya dihitung. Setelah itu, buka satu PR (mis. ubah teks di README) dan
 pastikan check TestSprite hijau — **link PR itulah yang disubmit**.

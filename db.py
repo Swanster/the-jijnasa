@@ -6,6 +6,7 @@ Cukup pakai stdlib (sqlite3), tanpa dependensi tambahan.
 
 import os
 import sqlite3
+import time
 from datetime import date
 
 DB_PATH = os.environ.get(
@@ -188,28 +189,42 @@ def buat_pesanan(user_id, nama, tipe, bayar):
         raise ValueError("keranjang kosong")
     total = cart_total(items)
     hari = date.today().strftime("%Y%m%d")
-    with _conn() as c:
-        seq = (
-            c.execute(
-                "SELECT COUNT(*) AS n FROM pesanan "
-                "WHERE date(dibuat,'localtime')=date('now','localtime')"
-            ).fetchone()["n"]
-            + 1
-        )
-        kode = f"KS-{hari}-{seq:03d}"
-        cur = c.execute(
-            "INSERT INTO pesanan (kode, user_id, nama, tipe, bayar, status, total)"
-            " VALUES (?,?,?,?,?,'baru',?)",
-            (kode, user_id, nama, tipe, bayar, total),
-        )
-        pid = cur.lastrowid
-        c.executemany(
-            "INSERT INTO pesanan_item (pesanan_id, menu_id, nama, harga, qty)"
-            " VALUES (?,?,?,?,?)",
-            [(pid, r["menu_id"], r["nama"], r["harga"], r["qty"]) for r in items],
-        )
-        c.execute("DELETE FROM keranjang WHERE user_id=?", (user_id,))
-    return kode, pid, total
+    last_err = None
+    for attempt in range(5):
+        with _conn() as c:
+            # BEGIN IMMEDIATE: dua checkout bersamaan diserialisasi di sini,
+            # sehingga COUNT(*) untuk nomor urut tidak balapan (race -> kode duplikat).
+            c.execute("BEGIN IMMEDIATE")
+            seq = (
+                c.execute(
+                    "SELECT COUNT(*) AS n FROM pesanan "
+                    "WHERE date(dibuat,'localtime')=date('now','localtime')"
+                ).fetchone()["n"]
+                + 1
+            )
+            kode = f"KS-{hari}-{seq:03d}"
+            try:
+                cur = c.execute(
+                    "INSERT INTO pesanan (kode, user_id, nama, tipe, bayar, status, total)"
+                    " VALUES (?,?,?,?,?,'baru',?)",
+                    (kode, user_id, nama, tipe, bayar, total),
+                )
+            except sqlite3.IntegrityError as e:
+                # Kode bentrok (sisa transaksi lama) -> ulangi dengan seq baru.
+                last_err = e
+                c.execute("ROLLBACK")
+                time.sleep(0.05 * (attempt + 1))
+                continue
+            pid = cur.lastrowid
+            c.executemany(
+                "INSERT INTO pesanan_item (pesanan_id, menu_id, nama, harga, qty)"
+                " VALUES (?,?,?,?,?)",
+                [(pid, r["menu_id"], r["nama"], r["harga"], r["qty"]) for r in items],
+            )
+            c.execute("DELETE FROM keranjang WHERE user_id=?", (user_id,))
+            c.execute("COMMIT")
+            return kode, pid, total
+    raise ValueError(f"gagal membuat kode pesanan: {last_err}")
 
 
 def pesanan_hari_ini():

@@ -17,12 +17,15 @@ import uuid
 from functools import wraps
 
 from flask import Flask, abort, redirect, request, session, url_for
+from markupsafe import escape
 
 import db
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-senja-ganti-di-produksi")
-ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "senja123")
+# Tanpa default yang diketahui umum: kosong = login admin nonaktif.
+ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
 db.init_db()
 
@@ -306,14 +309,14 @@ def index():
             lis.append(f"""
 <li class="menu-item">
 <div class="mi-head">
-<h3>{m['nama']}</h3>
+<h3>{escape(m['nama'])}</h3>
 <span class="dots" aria-hidden="true"></span>
 <span class="price">{rupiah(m['harga'])}</span>
 </div>
-<p class="desc">{m['deskripsi'] or ''}</p>
+<p class="desc">{escape(m['deskripsi'] or '') or '<i>Belum ada deskripsi.</i>'}</p>
 <form class="qtyform" method="post" action="{url_for('cart_add')}">
 <input type="hidden" name="menu_id" value="{m['id']}">
-<label>Jumlah <input type="number" name="qty" value="1" min="1" max="20" aria-label="Jumlah {m['nama']}"></label>
+<label>Jumlah <input type="number" name="qty" value="1" min="1" max="20" aria-label="Jumlah {escape(m['nama'])}"></label>
 <button type="submit">Tambah</button>
 </form>
 </li>""")
@@ -327,11 +330,11 @@ def index():
         for r in cart:
             lines.append(f"""
 <div class="cartline">
-<span class="n">{r['nama']} &times; {r['qty']}</span>
+<span class="n">{escape(r['nama'])} &times; {r['qty']}</span>
 <span>{rupiah(r['harga'] * r['qty'])}</span>
 <form class="inline" method="post" action="{url_for('cart_remove')}">
 <input type="hidden" name="menu_id" value="{r['menu_id']}">
-<button class="small ghost" type="submit" aria-label="Hapus {r['nama']}">hapus</button>
+<button class="small ghost" type="submit" aria-label="Hapus {escape(r['nama'])}">hapus</button>
 </form>
 </div>""")
         cart_html = (
@@ -396,12 +399,12 @@ def checkout():
     if not cart:
         return redirect(url_for("index"))
     lines = "".join(
-        f"<div class='cartline'><span class='n'>{r['nama']} &times; {r['qty']}</span>"
+        f"<div class='cartline'><span class='n'>{escape(r['nama'])} &times; {r['qty']}</span>"
         f"<span>{rupiah(r['harga'] * r['qty'])}</span></div>"
         for r in cart
     )
     err = request.args.get("err", "")
-    err_html = f"<p class='error'>{err}</p>" if err else ""
+    err_html = f"<p class='error'>{escape(err)}</p>" if err else ""
     body = f"""
 <h2 class="sec">Checkout</h2>
 {err_html}
@@ -448,7 +451,7 @@ def sukses(kode):
     if not pesanan:
         abort(404)
     lines = "".join(
-        f"<div class='cartline'><span class='n'>{r['nama']} &times; {r['qty']}</span>"
+        f"<div class='cartline'><span class='n'>{escape(r['nama'])} &times; {r['qty']}</span>"
         f"<span>{rupiah(r['harga'] * r['qty'])}</span></div>"
         for r in items
     )
@@ -456,7 +459,7 @@ def sukses(kode):
 <div class="receipt">
 <p class="thanks">Pesanan diterima.</p>
 <p class="kode">{pesanan['kode']}</p>
-<p>Atas nama <strong>{pesanan['nama']}</strong> &middot; {pesanan['tipe']} &middot; {pesanan['bayar'].upper()}</p>
+<p>Atas nama <strong>{escape(pesanan['nama'])}</strong> &middot; {pesanan['tipe']} &middot; {pesanan['bayar'].upper()}</p>
 {lines}
 <div class="total"><span>Total</span><span>{rupiah(pesanan['total'])}</span></div>
 <p>Status: <span class="badge {pesanan['status']}">{db.STATUS_LABEL[pesanan['status']]}</span></p>
@@ -473,24 +476,24 @@ def cek_status():
     if kode:
         pesanan, items = db.cari_kode(kode)
         if not pesanan:
-            hasil = f"<p class='error'>Kode <strong>{kode.upper()}</strong> tidak ditemukan. Periksa lagi ya.</p>"
+            hasil = f"<p class='error'>Kode <strong>{escape(kode.upper())}</strong> tidak ditemukan. Periksa lagi ya.</p>"
         else:
             lines = "".join(
-                f"<div class='cartline'><span class='n'>{r['nama']} &times; {r['qty']}</span>"
+                f"<div class='cartline'><span class='n'>{escape(r['nama'])} &times; {r['qty']}</span>"
                 f"<span>{rupiah(r['harga'] * r['qty'])}</span></div>"
                 for r in items
             )
             hasil = f"""
 <div class="notice">
 <p class="kode">{pesanan['kode']}</p>
-<p>Atas nama <strong>{pesanan['nama']}</strong> &middot; total {rupiah(pesanan['total'])}</p>
+<p>Atas nama <strong>{escape(pesanan['nama'])}</strong> &middot; total {rupiah(pesanan['total'])}</p>
 {lines}
 <p class="mt">Status: <span class="badge {pesanan['status']}">{db.STATUS_LABEL[pesanan['status']]}</span></p>
 </div>"""
     body = f"""
 <h2 class="sec">Cek Status Pesanan</h2>
 <form class="stack" method="get" action="{url_for('cek_status')}">
-<label>Kode pesanan <input type="text" name="kode" value="{kode.upper()}" placeholder="cth: KS-20261009-001" required></label>
+<label>Kode pesanan <input type="text" name="kode" value="{escape(kode.upper())}" placeholder="cth: KS-20261009-001" required></label>
 <button type="submit">Cek Status</button>
 </form>
 <div class="mt">{hasil}</div>"""
@@ -502,25 +505,32 @@ def cek_status():
 def admin_login():
     if session.get("is_admin"):
         return redirect(url_for("admin_dash"))
-    err = request.args.get("err", "")
-    err_html = f"<p class='error'>{err}</p>" if err else ""
+    return _login_page(request.args.get("err", ""))
+
+
+def _login_page(err=""):
+    err_html = f"<p class='error'>{escape(err)}</p>" if err else ""
     body = f"""
 <h2 class="sec">Login Admin</h2>
 {err_html}
 <form class="stack" method="post" action="{url_for('admin_login_post')}">
-<label>Kata sandi admin <input type="password" name="password" required autocomplete="current-password"></label>
+<label>Username <input type="text" name="username" required autocomplete="username"></label>
+<label>Kata sandi <input type="password" name="password" required autocomplete="current-password"></label>
 <button type="submit">Masuk</button>
-</form>
-<p class="empty mt">Demo: kata sandi bawaan <code>senja123</code> (ubah via env <code>ADMIN_PASSWORD</code>).</p>"""
+</form>"""
     return layout("Login Admin", body)
 
 
 @app.post("/admin")
 def admin_login_post():
-    if request.form.get("password") == ADMIN_PASSWORD:
+    username = (request.form.get("username") or "").strip()
+    password = request.form.get("password") or ""
+    if ADMIN_PASSWORD and username == ADMIN_USER and password == ADMIN_PASSWORD:
         session["is_admin"] = True
         return redirect(url_for("admin_dash"))
-    return redirect(url_for("admin_login", err="Kata sandi salah."))
+    # Login gagal: render halaman login + error langsung (tanpa redirect),
+    # supaya pesan tampil apa pun status sesi, dan sesi aktif tetap utuh.
+    return _login_page("Username atau kata sandi salah.")
 
 
 @app.get("/admin/logout")
@@ -541,7 +551,7 @@ def admin_dash():
         )
         rows.append(f"""
 <tr>
-<td class="nowrap"><div class="stacked"><strong>{o['kode']}</strong><span class="sub">{o['nama']}</span></div></td>
+<td class="nowrap"><div class="stacked"><strong>{o['kode']}</strong><span class="sub">{escape(o['nama'])}</span></div></td>
 <td class="nowrap"><div class="stacked"><span>{o['tipe']}</span><span class="sub">{o['bayar'].upper()}</span></div></td>
 <td class="num">{rupiah(o['total'])}</td>
 <td class="nowrap"><span class="badge {o['status']}">{db.STATUS_LABEL[o['status']]}</span></td>
@@ -564,13 +574,13 @@ def admin_dash():
         aktif_txt = "Aktif" if m["aktif"] else "Nonaktif"
         mrows.append(f"""
 <tr>
-<td><div class="stacked"><strong>{m['nama']}</strong><span class="sub">{KATEGORI_LABEL.get(m['kategori'], m['kategori'])} &middot; {m['deskripsi']}</span></div></td>
+<td><div class="stacked"><strong>{escape(m['nama'])}</strong><span class="sub">{KATEGORI_LABEL.get(m['kategori'], m['kategori'])} &middot; {escape(m['deskripsi']) or '&mdash;'}</span></div></td>
 <td class="num">{rupiah(m['harga'])}</td>
 <td class="nowrap">{aktif_txt}</td>
 <td class="nowrap">
 <form class="inline" method="post" action="{url_for('admin_menu_harga')}">
 <input type="hidden" name="menu_id" value="{m['id']}">
-<input type="number" name="harga" value="{m['harga']}" min="0" step="500" style="width:110px" aria-label="Harga baru {m['nama']}">
+<input type="number" name="harga" value="{m['harga']}" min="0" step="500" style="width:110px" aria-label="Harga baru {escape(m['nama'])}">
 <button class="small" type="submit">Harga</button>
 </form>
 <form class="inline" method="post" action="{url_for('admin_menu_aktif')}">
