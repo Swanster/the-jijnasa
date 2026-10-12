@@ -59,6 +59,39 @@ percobaan ditolak). Setelah logout, username & kata sandi harus diisi ulang.
 ADMIN_USER=bu-admin ADMIN_PASSWORD=rahasia123 SECRET_KEY=acak-kuat PORT=5000 python app.py
 ```
 
+## Keamanan login admin
+
+Tautan "Admin" **disembunyikan** dari navigasi publik secara default — panel
+tidak perlu diiklankan ke pengunjung. Akses tetap lewat URL langsung `/admin`.
+
+Yang menahan brute force adalah **rate limit**, bukan menyembunyikan URL:
+
+| Env | Default | Arti |
+| --- | --- | --- |
+| `ADMIN_MAX_ATTEMPTS` | `5` | percobaan gagal sebelum dikunci |
+| `ADMIN_WINDOW_SECONDS` | `900` | panjang jendela (15 menit) |
+| `ADMIN_LOCKOUT_SECONDS` | `900` | lama IP terkunci |
+| `TRUSTED_PROXY` | `0` | set `1` **hanya** kalau di belakang reverse proxy |
+| `SHOW_ADMIN_LINK` | `0` | set `1` untuk menampilkan kembali tautan Admin |
+
+Contoh ERROR message: `Kata sandi salah. Sisa percobaan: 3.` lalu
+`Terlalu banyak percobaan. Coba lagi dalam 15 menit.`
+
+Untuk **demo hackathon** (panel perlu dinilai juri), tampilkan tautannya:
+
+```bash
+SHOW_ADMIN_LINK=1 ADMIN_USER=... ADMIN_PASSWORD=... python app.py
+```
+
+Batas yang perlu diketahui:
+
+- Counter hidup di memori proses. Dengan N worker gunicorn, batas efektif jadi
+  N x `ADMIN_MAX_ATTEMPTS`, dan restart proses mengembalikan kuota.
+  Untuk multi-worker atau produksi serius, pindahkan counter ke Redis.
+- `X-Forwarded-For` **tidak** dipercaya kecuali `TRUSTED_PROXY=1`. Kalau header
+  itu dipercaya tanpa proxy yang menimpanya, penyerang cukup memutar header tiap
+  request untuk lolos lockout.
+
 ## Deploy (supaya dapat Live URL)
 
 Dijalankan di VPS sendiri dengan **gunicorn di belakang PM2** (proses auto-restart,
@@ -68,12 +101,25 @@ persisten antar reboot):
 pip install -r requirements.txt
 npm install -g pm2
 
-ADMIN_USER=<username-admin> ADMIN_PASSWORD=<kata-sandi-admin> SECRET_KEY=<acak-kuat> PORT=5000 \
+# SHOW_ADMIN_LINK=1 → tautan "Admin" tampil di navigasi (untuk demo hackathon,
+# supaya juri bisa menemukan panel). Hapus untuk produksi: panel tetap bisa
+# diakses via URL /admin, dan rate limit tetap berlaku.
+ADMIN_USER=<username-admin> ADMIN_PASSWORD=<kata-sandi-admin> SECRET_KEY=<acak-kuat> \
+PORT=5000 SHOW_ADMIN_LINK=1 TRUSTED_PROXY=1 \
 pm2 start gunicorn --name kedai-senja --cwd /path/to/kedai-web -- -b 127.0.0.1:5000 app:app
 
 pm2 save          # simpan daftar proses
 pm2 startup       # ikuti perintah yang dicetak agar jalan saat server reboot
 ```
+
+`TRUSTED_PROXY=1` memang warranted di sini: aplikasi duduk di belakang reverse
+proxy nginx/caddy yang menimpa `X-Forwarded-For`. Tanpa itu, semua pengunjung
+berbalik ke satu IP sehingga rate limit ikut ikutnya — satu penyerang yang
+mengunci IP itu juga mengunci semua orang lain.
+
+> Penting: `ADMIN_PASSWORD` untuk demo publik harus kuat. Tautan Admin yang
+> terlihat membuat panel mudah ditemukan — rate limit yang menahan, bukan
+> menyembunyikan. Pakai password acak panjang, jangan `admin123`.
 
 Di depannya pasang reverse proxy (nginx/caddy) ke `127.0.0.1:5000` untuk domain +
 HTTPS — `senja.keysproject.web.id` sudah diarahkan ke sana.
@@ -84,8 +130,24 @@ Update kode setelah pull:
 cd /path/to/kedai-web && git pull && pm2 restart kedai-senja
 ```
 
-Catatan: `ADMIN_PASSWORD` dan `SECRET_KEY` wajib lewat env — kalau `SECRET_KEY`
-berganti, sesi admin lama keluar semua.
+Atau pakai `deploy.sh` — ia menarik kode, mencadangkan DB, me-restart PM2 dengan
+env demo (`SHOW_ADMIN_LINK=1`), lalu memverifikasi `/healthz`:
+
+```bash
+./deploy.sh                      # preview dulu, tidak mengubah apa pun
+./deploy.sh --apply              # jalankan sungguhan
+./deploy.sh --apply --keep-db    # jangan reset database
+
+# secret dibaca dari env; simpan di file privat di luar repo
+source ~/.kedai-deploy.env && ./deploy.sh --apply
+```
+
+Database tidak ikut `git pull` (`*.db` ada di `.gitignore`). `kedai.db` yang
+dihapus akan dibangun ulang otomatis oleh `init_db()`: 6 tabel + 8 menu seed.
+Backup lama disimpan di `backup/<timestamp>/`.
+
+> Penting: `ADMIN_PASSWORD` dan `SECRET_KEY` wajib lewat env — kalau `SECRET_KEY`
+> berubah, sesi admin lama keluar semua.
 
 ## Wiring TestSprite (syarat hackathon)
 
@@ -94,20 +156,41 @@ Pilih salah satu:
 - **Route A — GitHub App (tanpa ubah repo):** di dashboard TestSprite →
   Settings → GitHub App → install ke repo ini. Hasil tes muncul sebagai
   komentar di PR.
-- **Route B — GitHub Actions (sudah disiapkan):** file
-  `.github/workflows/testsprite.yml` sudah ada. Tinggal tambah dua secret di
-  GitHub repo → Settings → Secrets → Actions:
-  - `TESTSPRITE_API_KEY` — API key TestSprite kamu
-  - `TESTSPRITE_PROJECT_ID` — project id dari portal 3.0 (mis. `proj_...`)
+### Route B — GitHub Actions (sudah disiapkan, tapi hemat token)
 
-Keduanya dihitung. Setelah itu, buka satu PR (mis. ubah teks di README) dan
-pastikan check TestSprite hijau — **link PR itulah yang disubmit**.
+File `.github/workflows/testsprite.yml` sudah ada. Tambah dua secret di
+GitHub repo → Settings → Secrets → Actions:
+
+- `TESTSPRITE_API_KEY` — API key TestSprite kamu
+- `TESTSPRITE_PROJECT_ID` — project id dari portal 3.0 (mis. `proj_...`)
+
+Check **tidak jalan otomatis** di setiap PR. Token TestSprite terbatas, jadi
+test hanya jalan kalau PR diberi label `run-testsprite`:
+
+```bash
+gh pr edit <nomor> --add-label run-testsprite
+# atau lewat web: PR -> Labels -> run-testsprite
+```
+
+Hapus label tersebut (atau jangan pernah pasang) = nol token terpakai. Ini
+memantau langkah sebelum membuka PR, jadi Anda tahu test sudah hijau tanpa
+membakar token saat masih banyak yang akan dirombak:
+
+```bash
+.venv/bin/python smoke_test.py   # 53 check, tanpa browser
+./run_e2e.sh                     # 44 check Camoufox (start/stop server otomatis)
+```
+
+Setelah yakin, baru buka PR + pasang label. **Link PR itulah yang disubmit.**
 
 ## Cara submit (sebelum 22 Okt 23:59 PT)
 
 1. Pastikan suite sudah di-generate di portal TestSprite 3.0 (terhadap live URL)
-2. Buka PR di repo ini yang memicu check TestSprite (harus hijau ✅)
-3. Post di Discord TestSprite → `#hackathon-submissions`:
+2. Jalankan test lokal — gratis: `./run_e2e.sh` (44 check) dan
+   `.venv/bin/python smoke_test.py` (53 check)
+3. Buka PR di repo ini, lalu pasang label `run-testsprite` agar check jalan
+   (harus hijau ✅)
+4. Post di Discord TestSprite → `#hackathon-submissions`:
    - link PR
    - live URL
    - email + nama akun TestSprite
@@ -119,9 +202,15 @@ pastikan check TestSprite hijau — **link PR itulah yang disubmit**.
 kedai-web/
 ├── app.py                 # aplikasi Flask (rute pelanggan + admin)
 ├── db.py                  # lapisan SQLite (menu, keranjang, pesanan)
+├── rate_limit.py          # rate limit + lockout login admin
 ├── requirements.txt       # flask + gunicorn
+├── deploy.sh              # deploy ke VPS (backup DB + restart PM2)
+├── smoke_test.py          # 53 check tanpa browser
+├── e2e_camoufox.py        # 44 check lewat browser Camoufox
+├── run_e2e.sh             # runner E2E (server start/stop otomatis)
+├── test_demo_admin_link.py  # mode tautan admin (demo vs produksi)
 ├── .github/workflows/
-│   └── testsprite.yml     # check otomatis tiap PR (Route B)
+│   └── testsprite.yml     # check TestSprite, jalan saat label run-testsprite
 └── README.md
 ```
 

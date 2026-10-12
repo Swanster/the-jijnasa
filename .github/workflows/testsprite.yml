@@ -1,32 +1,36 @@
 # TestSprite check — Season 4 hackathon
 #
-# Setiap pull request ke main otomatis diuji TestSprite terhadap
-# URL live aplikasi. Lihat https://docs.testsprite.com untuk
-# opsi input terbaru dari action ini.
+# Token TestSprite terbatas, jadi check TIDAK lagi otomatis di setiap PR.
+# Test hanya jalan kalau PR ini diberi label `run-testsprite`.
 #
-# Setup sekali:
-#   1. Buat akun gratis di https://www.testsprite.com (pakai email
-#      yang sama dengan yang disubmit di Discord #hackathon-submissions)
-#   2. Di dashboard TestSprite 3.0, generate test suite terhadap
-#      URL live aplikasi (bukan localhost)
-#   3. Di repo GitHub: Settings -> Secrets -> Actions, tambah secret
-#      bernama TESTSPRITE_API_KEY berisi API key TestSprite kamu
-#   4. (Alternatif tanpa file ini: install GitHub App dari dashboard
-#      TestSprite via Settings -> GitHub App — hasilnya sama)
+# Pakai saat sudah siap dan ingin tahu hasilnya:
+#   gh pr edit <nomor> --add-label run-testsprite
+# atau lewat web: PR -> Labels -> run-testsprite
+#
+# Perhatikan `types: [labeled]` — event pull_request bawaan tidak memicu
+# ulang saat label ditambahkan, jadi harus disebut eksplisit.
+#
+# Setup secret (sekali):
+#   1. Akun gratis di https://www.testsprite.com
+#   2. Generate test suite terhadap URL live (bukan localhost)
+#   3. Settings -> Secrets -> Actions: TESTSPRITE_API_KEY
+#      dan TESTSPRITE_PROJECT_ID (dari Settings -> Project di portal)
 
 name: TestSprite
 
 on:
   pull_request:
     branches: [main]
+    types: [labeled]
 
 jobs:
   testsprite:
     runs-on: ubuntu-latest
-    # Fork PR tidak punya repository secrets -> api-key kosong -> check selalu
-    # merah. Lewati fork; push dari repo sendiri tetap jalan.
+    # Jalan hanya untuk PR berlabel run-testsprite, dan hanya dari repo
+    # sendiri. Fork tidak punya repository secrets -> api-key kosong ->
+    # check selalu merah.
     if: >-
-      github.event_name != 'pull_request' ||
+      github.event.pull_request.labels.*.name == 'run-testsprite' &&
       github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - uses: actions/checkout@v4

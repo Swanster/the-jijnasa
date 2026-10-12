@@ -22,6 +22,7 @@ from flask import Flask, abort, redirect, request, session, url_for
 from markupsafe import escape
 
 import db
+import rate_limit
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "dev-senja-ganti-di-produksi")
@@ -29,9 +30,29 @@ app.secret_key = os.environ.get("SECRET_KEY", "dev-senja-ganti-di-produksi")
 ADMIN_USER = os.environ.get("ADMIN_USER", "admin")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
 
+# Tautan "Admin" disembunyikan dari navigasi publik: URL panel admin
+# tidak perlu diiklankan ke pengunjung. Ini hygiene, BUKAN security —
+# rate limit di admin_login_post yang menahan brute force. Akses tetap
+# lewat URL langsung (/admin).
+# Untuk demo/hackathon ketika panel perlu ditunjukkan, set
+# SHOW_ADMIN_LINK=1 agar tautannya muncul lagi di navigasi.
+SHOW_ADMIN_LINK = os.environ.get("SHOW_ADMIN_LINK", "") == "1"
+
 db.init_db()
 
 KATEGORI_LABEL = {"kopi": "Kopi", "nonkopi": "Non-Kopi", "snack": "Snack"}
+
+
+def admin_nav():
+    """Tautan Admin di navigasi.
+
+    Sengaja fungsi, bukan konstanta modul: url_for() butuh application
+    context, jadi tidak boleh dipanggil di level modul (crash saat boot
+    kalau SHOW_ADMIN_LINK=1).
+    """
+    if not SHOW_ADMIN_LINK:
+        return ""
+    return f"<a href='{url_for('admin_login')}'>Admin</a>"
 
 
 # ---------------------------------------------------------------- helpers
@@ -275,7 +296,7 @@ def layout(title, body):
 <nav class="links">
 <a href="{url_for('index')}">Menu</a>
 <a href="{url_for('cek_status')}">Cek Status</a>
-<a href="{url_for('admin_login')}">Admin</a>
+{admin_nav()}
 </nav>
 </div></header>
 <div class="wrap">{body}</div>
@@ -528,15 +549,36 @@ def _login_page(err=""):
 
 @app.post("/admin")
 def admin_login_post():
+    ip = rate_limit.client_ip()
+
+    # Rate limit: tolak sebelum menyentuh kredensial, supaya brute force
+    # tidak bisa jalan pada kecepatan penuh.
+    allowed, remaining, retry_after = rate_limit.status(ip)
+    if not allowed:
+        menit = max(1, retry_after // 60)
+        return redirect(url_for("admin_login", err=(
+            f"Terlalu banyak percobaan. Coba lagi dalam {menit} menit.")))
+
     username = (request.form.get("username") or "").strip()
     password = request.form.get("password") or ""
     if ADMIN_PASSWORD and username == ADMIN_USER and password == ADMIN_PASSWORD:
+        rate_limit.reset(ip)          # login sah: buka kuota untuk IP ini
         session["is_admin"] = True
         return redirect(url_for("admin_dash"))
+
+    # Gagal: catat di limiter. Setelah kuota habis, percobaan berikutnya
+    # diblokir di atas tanpa membandingkan password sama sekali.
+    tries = rate_limit.record_failure(ip)
+    sisa = max(0, rate_limit.MAX_ATTEMPTS - tries)
+    if sisa > 0:
+        err = f"Kata sandi salah. Sisa percobaan: {sisa}."
+    else:
+        menit = max(1, rate_limit.LOCKOUT_SECONDS // 60)
+        err = f"Kata sandi salah. Login dikunci {menit} menit."
     # Login gagal: redirect ke halaman login dengan parameter err (kontrak
     # yang direkam suite TestSprite). Sesi admin lama TIDAK dibuang — GET
     # /admin dengan err menampilkan form + pesan error walau sesi ada.
-    return redirect(url_for("admin_login", err="Kata sandi salah."))
+    return redirect(url_for("admin_login", err=err))
 
 
 @app.get("/admin/logout")
