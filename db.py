@@ -131,6 +131,8 @@ def set_harga(menu_id, harga):
 def set_aktif(menu_id, aktif):
     with _conn() as c:
         c.execute("UPDATE menu SET aktif=? WHERE id=?", (1 if aktif else 0, menu_id))
+        if not aktif:
+            c.execute("DELETE FROM keranjang WHERE menu_id=?", (menu_id,))
 
 
 # --- Pelanggan --------------------------------------------------------------
@@ -149,7 +151,7 @@ def cart_items(user_id):
         return c.execute(
             "SELECT k.menu_id, k.qty, m.nama, m.harga, m.aktif "
             "FROM keranjang k JOIN menu m ON m.id=k.menu_id "
-            "WHERE k.user_id=? ORDER BY m.nama",
+            "WHERE k.user_id=? AND m.aktif=1 ORDER BY m.nama",
             (user_id,),
         ).fetchall()
 
@@ -184,10 +186,6 @@ def buat_pesanan(user_id, nama, tipe, bayar):
 
     Nomor urut dihitung dari database (tidak reset saat restart).
     """
-    items = cart_items(user_id)
-    if not items:
-        raise ValueError("keranjang kosong")
-    total = cart_total(items)
     hari = date.today().strftime("%Y%m%d")
     last_err = None
     for attempt in range(5):
@@ -195,6 +193,23 @@ def buat_pesanan(user_id, nama, tipe, bayar):
             # BEGIN IMMEDIATE: dua checkout bersamaan diserialisasi di sini,
             # sehingga COUNT(*) untuk nomor urut tidak balapan (race -> kode duplikat).
             c.execute("BEGIN IMMEDIATE")
+            # Recheck within the write transaction; an admin may deactivate a
+            # cart item after the earlier cart_items() read.
+            active_ids = {r[0] for r in c.execute(
+                "SELECT menu_id FROM keranjang k JOIN menu m ON m.id=k.menu_id "
+                "WHERE k.user_id=? AND m.aktif=1",
+                (user_id,),
+            ).fetchall()}
+            if not active_ids:
+                c.execute("ROLLBACK")
+                raise ValueError("tidak ada menu aktif di keranjang")
+            items = c.execute(
+                "SELECT k.menu_id, k.qty, m.nama, m.harga, m.aktif "
+                "FROM keranjang k JOIN menu m ON m.id=k.menu_id "
+                "WHERE k.user_id=? AND m.aktif=1 ORDER BY m.nama",
+                (user_id,),
+            ).fetchall()
+            total = cart_total(items)
             seq = (
                 c.execute(
                     "SELECT COUNT(*) AS n FROM pesanan "

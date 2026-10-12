@@ -627,10 +627,12 @@ onsubmit="return confirm('Muat ulang aplikasi? Sesi admin tidak hilang.')">
 
 
 @app.after_request
-def tanpa_cache_admin(resp):
-    """Halaman admin jangan di-cache: data pesanan harus selalu segar."""
-    if request.path.startswith("/admin"):
-        resp.headers["Cache-Control"] = "no-store"
+def tanpa_cache_menu(resp):
+    """Jangan cache menu/cart/admin: perubahan ketersediaan harus langsung tampak."""
+    if request.path in ("/", "/checkout") or request.path.startswith("/admin"):
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        resp.headers["Pragma"] = "no-cache"
+        resp.headers["Expires"] = "0"
     return resp
 
 
