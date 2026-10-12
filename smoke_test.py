@@ -175,6 +175,35 @@ check("GET /admin/dashboard -> 200", r.status_code == 200, f"status={r.status_co
 check("Cache-Control no-store di halaman admin",
       "no-store" in r.headers.get("Cache-Control", ""), r.headers.get("Cache-Control", ""))
 
+# Beranda memuat daftar menu. Kalau responsnya di-cache browser, admin yang
+# baru saja menonaktifkan menu akan masih melihat daftar lama setelah reload.
+r = c.get("/")
+cc = r.headers.get("Cache-Control", "")
+check("Cache-Control no-store di beranda (daftar menu)",
+      "no-store" in cc and "max-age=0" in cc, f"cc={cc!r}")
+check("Pragma/Expires anti-cache di beranda",
+      r.headers.get("Pragma", "") == "no-cache" and r.headers.get("Expires", "") == "0",
+      f"pragma={r.headers.get('Pragma','')!r} expires={r.headers.get('Expires','')!r}")
+
+# Regression: nonaktifkan semua menu lewat db, beranda harus kosong dan
+# menampilkan empty-state, bukan cuma pesan keranjang kosong.
+_id_aktif = [m["id"] for m in D.menu_aktif()]
+for mid in _id_aktif:
+    D.set_aktif(mid, False)
+r = c.get("/")
+_html = r.get_data(as_text=True)
+check("Semua menu nonaktif -> query publik kosong", len(D.menu_aktif()) == 0)
+check("Beranda tampil empty-state menu saat semua item nonaktif",
+      "Menu belum tersedia" in _html, "empty-state tidak muncul")
+check("Empty-state menu terpisah dari pesan keranjang kosong",
+      "Menu belum tersedia" in _html and _html.count("Menu belum tersedia") == 1)
+check("Tidak ada nama menu yang bocor ke halaman publik",
+      not any(m["nama"] in _html for m in D.semua_menu()),
+      "ada item menu yang masih tampil")
+for mid in _id_aktif:
+    D.set_aktif(mid, True)
+check("Aktifkan kembali -> menu publik pulih", len(D.menu_aktif()) == len(_id_aktif))
+
 r = c.get("/admin/pesanan")
 check("GET /admin/pesanan -> 200", r.status_code == 200, f"status={r.status_code}")
 check("Riwayat memuat pesanan uji", KODE_PESANAN in r.get_data(as_text=True))
