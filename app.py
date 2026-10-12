@@ -669,20 +669,15 @@ onsubmit="return confirm('Muat ulang aplikasi? Sesi admin tidak hilang.')">
 
 
 @app.after_request
-def tanpa_cache_admin(resp):
-    """Halaman admin dan beranda jangan di-cache.
+def tanpa_cache_menu(resp):
+    """Jangan cache menu/cart/admin: perubahan ketersediaan harus langsung tampak.
 
-    Admin: data pesanan harus selalu segar.
-
-    Beranda: satu-satunya layar publik yang memuat daftar menu. Tanpa
-    no-store di sini, admin menonaktifkan menu lalu me-reload beranda bisa
-    masih melihat daftar lama dari cache browser - persis yang diuji test
-    "Show empty menu state when all items are inactive".
+    Gabungan kedua sisi: admin (data pesanan segar), beranda + /checkout
+    (status ketersediaan menu langsung tampak), header kuat no-store +
+    no-cache + must-revalidate.
     """
-    if request.path.startswith("/admin"):
-        resp.headers["Cache-Control"] = "no-store"
-    elif request.path in ("/", "/index.html"):
-        resp.headers["Cache-Control"] = "no-store, max-age=0"
+    if request.path in ("/", "/checkout") or request.path.startswith("/admin"):
+        resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         resp.headers["Pragma"] = "no-cache"
         resp.headers["Expires"] = "0"
     return resp
